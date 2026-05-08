@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 """
-Master NFC Writer GUI starter.
+Master NFC Writer GUI v0.2.1.
 
-This is a Tkinter GUI wrapper around the working CLI core in src/master_nfc_writer.py.
+Windows Tkinter GUI for the proven ACR122U + MIFARE Classic 1K NFC writer.
 
-Current goals:
-- Keep the proven ACR122U/MIFARE Classic write logic.
-- Add an easier Windows interface for scanning, verifying, formatting, writing,
-  and batch-writing owned NFC business cards.
-- Keep destructive actions behind confirmation dialogs.
+v0.2.1 adds guided batch writing:
+- Write one card at a time from the GUI
+- Success/failure counters
+- Duplicate UID detection
+- Existing NDEF warning/overwrite control
+- Format + Write or Write Only mode
 
-Run:
-    python .\src\master_nfc_writer_gui.py
+Run from repo root:
+    python -m src.master_nfc_writer_gui
 
 Or:
     run_gui.bat
@@ -39,19 +40,29 @@ class Worker:
         self.messages: queue.Queue[tuple[str, object]] = queue.Queue()
 
     def run(self, target, *args, **kwargs) -> None:
-        thread = threading.Thread(
-            target=self._run,
-            args=(target, args, kwargs),
-            daemon=True,
-        )
+        thread = threading.Thread(target=self._run, args=(target, args, kwargs), daemon=True)
         thread.start()
 
     def _run(self, target, args, kwargs) -> None:
         try:
             result = target(*args, **kwargs)
             self.messages.put(("success", result))
-        except Exception as exc:  # noqa: BLE001 - surface user-facing tool errors
+        except Exception as exc:  # noqa: BLE001 - user-facing NFC/tool errors
             self.messages.put(("error", exc))
+
+
+class BatchState:
+    def __init__(self) -> None:
+        self.seen_uids: set[str] = set()
+        self.success_count = 0
+        self.failure_count = 0
+        self.active = False
+
+    def reset(self) -> None:
+        self.seen_uids.clear()
+        self.success_count = 0
+        self.failure_count = 0
+        self.active = True
 
 
 class MasterNfcWriterGui(tk.Tk):
@@ -59,10 +70,12 @@ class MasterNfcWriterGui(tk.Tk):
         super().__init__()
 
         self.title("Master NFC Writer")
-        self.geometry("860x620")
-        self.minsize(760, 540)
+        self.geometry("920x700")
+        self.minsize(820, 600)
 
         self.worker = Worker(self)
+        self.batch = BatchState()
+        self.batch_window: tk.Toplevel | None = None
 
         self.reader_var = tk.StringVar()
         self.uid_var = tk.StringVar(value="No card scanned")
@@ -70,6 +83,13 @@ class MasterNfcWriterGui(tk.Tk):
         self.record_type_var = tk.StringVar(value="url")
         self.payload_var = tk.StringVar(value=nfc.CONFIG.get("default_url", ""))
         self.preset_var = tk.StringVar()
+
+        self.batch_status_var = tk.StringVar(value="Batch mode not started")
+        self.batch_success_var = tk.StringVar(value="0")
+        self.batch_failure_var = tk.StringVar(value="0")
+        self.batch_last_uid_var = tk.StringVar(value="None")
+        self.batch_mode_var = tk.StringVar(value="format_write")
+        self.batch_overwrite_var = tk.BooleanVar(value=False)
 
         self.reader_map = {}
 
@@ -99,7 +119,7 @@ class MasterNfcWriterGui(tk.Tk):
         reader_frame.pack(fill=tk.X, pady=(0, 10))
 
         ttk.Label(reader_frame, text="Reader:").grid(row=0, column=0, padx=8, pady=8, sticky=tk.W)
-        self.reader_combo = ttk.Combobox(reader_frame, textvariable=self.reader_var, state="readonly", width=55)
+        self.reader_combo = ttk.Combobox(reader_frame, textvariable=self.reader_var, state="readonly", width=65)
         self.reader_combo.grid(row=0, column=1, padx=8, pady=8, sticky=tk.EW)
         ttk.Button(reader_frame, text="Refresh", command=self.refresh_readers).grid(row=0, column=2, padx=8, pady=8)
         reader_frame.columnconfigure(1, weight=1)
@@ -111,7 +131,7 @@ class MasterNfcWriterGui(tk.Tk):
         ttk.Label(card_frame, textvariable=self.uid_var).grid(row=0, column=1, padx=8, pady=6, sticky=tk.W)
 
         ttk.Label(card_frame, text="NDEF:").grid(row=1, column=0, padx=8, pady=6, sticky=tk.W)
-        ttk.Label(card_frame, textvariable=self.ndef_var, wraplength=660).grid(row=1, column=1, padx=8, pady=6, sticky=tk.W)
+        ttk.Label(card_frame, textvariable=self.ndef_var, wraplength=700).grid(row=1, column=1, padx=8, pady=6, sticky=tk.W)
 
         btns = ttk.Frame(card_frame)
         btns.grid(row=0, column=2, rowspan=2, padx=8, pady=8, sticky=tk.E)
@@ -123,7 +143,7 @@ class MasterNfcWriterGui(tk.Tk):
         write_frame.pack(fill=tk.X, pady=(0, 10))
 
         ttk.Label(write_frame, text="Preset:").grid(row=0, column=0, padx=8, pady=8, sticky=tk.W)
-        self.preset_combo = ttk.Combobox(write_frame, textvariable=self.preset_var, state="readonly", width=55)
+        self.preset_combo = ttk.Combobox(write_frame, textvariable=self.preset_var, state="readonly", width=65)
         self.preset_combo.grid(row=0, column=1, padx=8, pady=8, sticky=tk.EW)
         self.preset_combo.bind("<<ComboboxSelected>>", self.apply_selected_preset)
 
@@ -149,20 +169,94 @@ class MasterNfcWriterGui(tk.Tk):
         ttk.Button(write_buttons, text="Format + Write", command=lambda: self.write_card(force_format=True)).pack(
             side=tk.LEFT, padx=(0, 8)
         )
-        ttk.Button(write_buttons, text="Batch Mode", command=self.batch_mode_notice).pack(side=tk.LEFT)
+        ttk.Button(write_buttons, text="Guided Batch Mode", command=self.open_batch_window).pack(side=tk.LEFT)
 
         write_frame.columnconfigure(1, weight=1)
 
         log_frame = ttk.LabelFrame(outer, text="Activity")
         log_frame.pack(fill=tk.BOTH, expand=True)
 
-        self.log_text = tk.Text(log_frame, height=12, wrap=tk.WORD)
+        self.log_text = tk.Text(log_frame, height=14, wrap=tk.WORD)
         self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scroll = ttk.Scrollbar(log_frame, command=self.log_text.yview)
         scroll.pack(side=tk.RIGHT, fill=tk.Y)
         self.log_text.configure(yscrollcommand=scroll.set)
 
         self.log("Ready. Plug in the ACR122U, place a card, then scan.")
+
+    def open_batch_window(self) -> None:
+        if self.batch_window and self.batch_window.winfo_exists():
+            self.batch_window.focus()
+            return
+
+        win = tk.Toplevel(self)
+        win.title("Guided Batch Mode")
+        win.geometry("760x520")
+        win.minsize(700, 480)
+        self.batch_window = win
+
+        outer = ttk.Frame(win, padding=14)
+        outer.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(outer, text="Guided Batch Writing", font=("Segoe UI", 16, "bold")).pack(anchor=tk.W)
+        ttk.Label(
+            outer,
+            text="Write one owned NFC business card at a time. Place a card, click Write Current Card, then remove it.",
+        ).pack(anchor=tk.W, pady=(0, 12))
+
+        settings = ttk.LabelFrame(outer, text="Batch Settings")
+        settings.pack(fill=tk.X, pady=(0, 10))
+
+        ttk.Label(settings, text="Mode:").grid(row=0, column=0, padx=8, pady=8, sticky=tk.W)
+        ttk.Radiobutton(settings, text="Format + Write fresh cards", variable=self.batch_mode_var, value="format_write").grid(
+            row=0, column=1, padx=8, pady=8, sticky=tk.W
+        )
+        ttk.Radiobutton(settings, text="Write only already-formatted cards", variable=self.batch_mode_var, value="write_only").grid(
+            row=0, column=2, padx=8, pady=8, sticky=tk.W
+        )
+
+        ttk.Checkbutton(
+            settings,
+            text="Allow overwriting cards that already contain NDEF data",
+            variable=self.batch_overwrite_var,
+        ).grid(row=1, column=1, columnspan=2, padx=8, pady=8, sticky=tk.W)
+
+        status = ttk.LabelFrame(outer, text="Batch Status")
+        status.pack(fill=tk.X, pady=(0, 10))
+
+        ttk.Label(status, text="Status:").grid(row=0, column=0, padx=8, pady=6, sticky=tk.W)
+        ttk.Label(status, textvariable=self.batch_status_var, wraplength=600).grid(row=0, column=1, columnspan=3, padx=8, pady=6, sticky=tk.W)
+
+        ttk.Label(status, text="Success:").grid(row=1, column=0, padx=8, pady=6, sticky=tk.W)
+        ttk.Label(status, textvariable=self.batch_success_var).grid(row=1, column=1, padx=8, pady=6, sticky=tk.W)
+
+        ttk.Label(status, text="Failed:").grid(row=1, column=2, padx=8, pady=6, sticky=tk.W)
+        ttk.Label(status, textvariable=self.batch_failure_var).grid(row=1, column=3, padx=8, pady=6, sticky=tk.W)
+
+        ttk.Label(status, text="Last UID:").grid(row=2, column=0, padx=8, pady=6, sticky=tk.W)
+        ttk.Label(status, textvariable=self.batch_last_uid_var).grid(row=2, column=1, columnspan=3, padx=8, pady=6, sticky=tk.W)
+
+        buttons = ttk.Frame(outer)
+        buttons.pack(fill=tk.X, pady=(0, 10))
+        ttk.Button(buttons, text="Start / Reset Batch", command=self.start_batch).pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(buttons, text="Write Current Card", command=self.batch_write_current_card).pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(buttons, text="Stop Batch", command=self.stop_batch).pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(buttons, text="Close", command=win.destroy).pack(side=tk.RIGHT)
+
+        help_box = ttk.LabelFrame(outer, text="Workflow")
+        help_box.pack(fill=tk.BOTH, expand=True)
+        help_text = tk.Text(help_box, height=9, wrap=tk.WORD)
+        help_text.pack(fill=tk.BOTH, expand=True)
+        help_text.insert(
+            tk.END,
+            "1. Choose Format + Write for fresh blank cards, or Write Only for already-formatted cards.\n"
+            "2. Click Start / Reset Batch.\n"
+            "3. Place one card on the ACR122U.\n"
+            "4. Click Write Current Card.\n"
+            "5. Wait for success, remove the card, then place the next one.\n\n"
+            "Safety: use this only on blank cards or cards you own. Do not use this on access badges, hotel cards, transit cards, employee cards, or anything that controls access.\n",
+        )
+        help_text.configure(state=tk.DISABLED)
 
     # ------------------------------------------------------------------
     # Helpers
@@ -174,6 +268,8 @@ class MasterNfcWriterGui(tk.Tk):
 
     def set_busy(self, busy: bool) -> None:
         self.configure(cursor="watch" if busy else "")
+        if self.batch_window and self.batch_window.winfo_exists():
+            self.batch_window.configure(cursor="watch" if busy else "")
 
     def get_selected_reader(self):
         name = self.reader_var.get()
@@ -224,14 +320,21 @@ class MasterNfcWriterGui(tk.Tk):
                 self.set_busy(False)
 
                 if kind == "error":
-                    self.log(f"ERROR: {payload}")
-                    messagebox.showerror("NFC Error", str(payload))
+                    self.handle_worker_error(payload)
                 else:
                     self.handle_worker_success(payload)
         except queue.Empty:
             pass
 
         self.after(150, self.poll_worker)
+
+    def handle_worker_error(self, payload) -> None:
+        self.log(f"ERROR: {payload}")
+        if self.batch.active:
+            self.batch.failure_count += 1
+            self.batch_failure_var.set(str(self.batch.failure_count))
+            self.batch_status_var.set(f"Failed: {payload}")
+        messagebox.showerror("NFC Error", str(payload))
 
     def handle_worker_success(self, payload) -> None:
         action = payload.get("action")
@@ -263,6 +366,22 @@ class MasterNfcWriterGui(tk.Tk):
                 self.log(f"Write complete for UID {uid}.")
 
             messagebox.showinfo("Success", "Card write verified successfully.")
+
+        elif action == "batch_write":
+            uid = payload.get("uid", "")
+            decoded = payload.get("decoded")
+            self.batch.success_count += 1
+            self.batch.seen_uids.add(uid)
+            self.batch_success_var.set(str(self.batch.success_count))
+            self.batch_last_uid_var.set(uid)
+
+            if decoded:
+                self.batch_status_var.set(f"Success. Remove card. Last wrote: {decoded.get('value')}")
+                self.ndef_var.set(f"{decoded.get('type')}: {decoded.get('value')}")
+                self.log(f"Batch success UID {uid}: {decoded.get('value')}")
+            else:
+                self.batch_status_var.set("Success. Remove card and place the next one.")
+                self.log(f"Batch success UID {uid}.")
 
     # ------------------------------------------------------------------
     # NFC actions
@@ -323,11 +442,6 @@ class MasterNfcWriterGui(tk.Tk):
 
         try:
             uid = nfc.get_uid(conn)
-            existing = nfc.read_decoded_ndef_from_conn(conn)
-
-            if existing and not force_format:
-                # GUI has already asked for write confirmation, but surface this in logs.
-                self.worker.messages.put(("success", {"action": "scan", "uid": uid, "decoded": existing}))
 
             if force_format:
                 nfc.format_mifare_classic_1k_as_ndef(conn)
@@ -359,12 +473,94 @@ class MasterNfcWriterGui(tk.Tk):
             except Exception:
                 pass
 
-    def batch_mode_notice(self) -> None:
-        messagebox.showinfo(
-            "Batch Mode",
-            "For this GUI starter, batch mode remains safest in the command-line app.\n\n"
-            "Next GUI milestone will add guided batch writing with card remove/insert detection.",
+    # ------------------------------------------------------------------
+    # Guided batch writing
+    # ------------------------------------------------------------------
+
+    def start_batch(self) -> None:
+        self.batch.reset()
+        self.batch_success_var.set("0")
+        self.batch_failure_var.set("0")
+        self.batch_last_uid_var.set("None")
+        self.batch_status_var.set("Batch started. Place one card on the reader, then click Write Current Card.")
+        self.log("Guided batch mode started.")
+
+    def stop_batch(self) -> None:
+        self.batch.active = False
+        self.batch_status_var.set(
+            f"Batch stopped. Final totals: success={self.batch.success_count}, failed={self.batch.failure_count}"
         )
+        self.log(self.batch_status_var.get())
+
+    def batch_write_current_card(self) -> None:
+        if not self.batch.active:
+            messagebox.showwarning("Batch Not Started", "Click Start / Reset Batch first.")
+            return
+
+        record_type = self.record_type_var.get()
+        value = self.payload_var.get().strip()
+        if not value:
+            messagebox.showwarning("Missing Payload", "Enter a payload or choose a preset first.")
+            return
+
+        force_format = self.batch_mode_var.get() == "format_write"
+        allow_overwrite = bool(self.batch_overwrite_var.get())
+
+        self.set_busy(True)
+        self.batch_status_var.set("Writing current card...")
+        self.log(
+            f"Batch write started: {'Format + Write' if force_format else 'Write Only'} | "
+            f"{record_type} -> {value}"
+        )
+        self.worker.run(self._batch_write_card_worker, record_type, value, force_format, allow_overwrite)
+
+    def _batch_write_card_worker(self, record_type: str, value: str, force_format: bool, allow_overwrite: bool):
+        reader = self.get_selected_reader()
+        conn = nfc.connect_card(reader)
+        uid = "unknown"
+
+        try:
+            uid = nfc.get_uid(conn)
+
+            if uid in self.batch.seen_uids:
+                raise nfc.NFCError(f"UID {uid} was already written in this batch. Remove it and place a new card.")
+
+            existing = nfc.read_decoded_ndef_from_conn(conn)
+            if existing and not allow_overwrite:
+                raise nfc.NFCError(
+                    "This card already contains NDEF data. Enable overwrite in Batch Settings, "
+                    "or use a blank card."
+                )
+
+            if force_format:
+                nfc.format_mifare_classic_1k_as_ndef(conn)
+
+            nfc.write_ndef_payload_to_nfc_sectors(conn, record_type, value)
+            decoded = nfc.read_decoded_ndef_from_conn(conn)
+            nfc.log_write(
+                uid,
+                "gui_batch_format_write" if force_format else "gui_batch_write",
+                record_type,
+                value,
+                "success",
+                f"decoded={decoded}",
+            )
+            return {"action": "batch_write", "uid": uid, "decoded": decoded}
+        except Exception as exc:
+            nfc.log_write(
+                uid,
+                "gui_batch_format_write" if force_format else "gui_batch_write",
+                record_type,
+                value,
+                "failed",
+                str(exc),
+            )
+            raise
+        finally:
+            try:
+                conn.disconnect()
+            except Exception:
+                pass
 
 
 def main() -> None:
