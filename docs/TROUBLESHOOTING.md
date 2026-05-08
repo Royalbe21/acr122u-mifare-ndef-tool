@@ -1,6 +1,6 @@
-# Troubleshooting: `Write block 7 failed. SW=63 00`
+# Troubleshooting
 
-## What it means
+## `Write block 7 failed. SW=63 00`
 
 Block `7` is the **sector 1 trailer block** on a MIFARE Classic 1K card.
 
@@ -29,6 +29,16 @@ Write default business card without formatting
 
 Do **not** choose `Format + Write` again on the same already-formatted card unless using the hotfix.
 
-## Why the hotfix helps
+## New workflow rule
 
-The hotfix changes `format_mifare_classic_1k_as_ndef()` so that if a sector trailer rewrite is blocked, the tool continues and relies on the later payload write/verify step as the actual pass/fail test.
+Fresh / blank MIFARE Classic card:
+
+```text
+Format + Write
+```
+
+Already-formatted MIFARE Classic card:
+
+```text
+Write Only
+```
