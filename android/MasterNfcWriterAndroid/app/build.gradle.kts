@@ -19,3 +19,13 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 }
+// Android Studio sync compatibility task for AGP 9 built-in Kotlin support.
+tasks.register("prepareKotlinBuildScriptModel") {
+    group = "ide"
+    description = "No-op compatibility task for Android Studio Kotlin build-script model sync."
+}
+// Android Studio sync compatibility task for AGP 9 built-in Kotlin support.
+tasks.register("prepareKotlinBuildScriptModel") {
+    group = "ide"
+    description = "No-op compatibility task for Android Studio Kotlin build-script model sync."
+}
