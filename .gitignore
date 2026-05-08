@@ -22,3 +22,9 @@ backups/
 Thumbs.db
 .vscode/
 .idea/
+
+# Android local/generated files
+android/**/.gradle/
+android/**/local.properties
+android/**/app/build/
+android/**/build/
