@@ -1,0 +1,35 @@
+{
+  "business_name": "Master of Repairs LLC",
+  "owner_name": "Rick Browneagle",
+  "default_url": "https://blinq.me/cmnuxghx600810as66v5d49ys?utm_medium=accessory",
+  "website_url": "https://masterofrepairs.com",
+  "phone": "234-238-3694",
+  "email": "admin@masterofrepairs.com",
+  "presets": [
+    {
+      "name": "Master of Repairs Blinq Card",
+      "type": "url",
+      "value": "https://blinq.me/cmnuxghx600810as66v5d49ys?utm_medium=accessory"
+    },
+    {
+      "name": "Master of Repairs Website",
+      "type": "url",
+      "value": "https://masterofrepairs.com"
+    },
+    {
+      "name": "Call Master of Repairs",
+      "type": "phone",
+      "value": "234-238-3694"
+    },
+    {
+      "name": "Email Master of Repairs",
+      "type": "email",
+      "value": "admin@masterofrepairs.com"
+    }
+  ],
+  "settings": {
+    "require_confirmation_for_format": true,
+    "require_confirmation_for_overwrite": true,
+    "batch_delay_seconds_after_success": 1.0
+  }
+}

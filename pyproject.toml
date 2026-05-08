@@ -1,0 +1,15 @@
+[project]
+name = "master-nfc-writer"
+version = "0.3.0"
+description = "ACR122U MIFARE Classic 1K NDEF business card writer"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pyscard>=2.3.0"
+]
+
+[tool.ruff]
+line-length = 120
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

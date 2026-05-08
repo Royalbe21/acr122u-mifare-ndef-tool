@@ -1,0 +1,35 @@
+{
+  "business_name": "Your Business Name",
+  "owner_name": "Your Name",
+  "default_url": "https://example.com/card",
+  "website_url": "https://example.com",
+  "phone": "555-555-5555",
+  "email": "you@example.com",
+  "presets": [
+    {
+      "name": "Default Business Card",
+      "type": "url",
+      "value": "https://example.com/card"
+    },
+    {
+      "name": "Website",
+      "type": "url",
+      "value": "https://example.com"
+    },
+    {
+      "name": "Call",
+      "type": "phone",
+      "value": "555-555-5555"
+    },
+    {
+      "name": "Email",
+      "type": "email",
+      "value": "you@example.com"
+    }
+  ],
+  "settings": {
+    "require_confirmation_for_format": true,
+    "require_confirmation_for_overwrite": true,
+    "batch_delay_seconds_after_success": 1.0
+  }
+}
