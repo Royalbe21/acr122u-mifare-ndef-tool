@@ -28,3 +28,11 @@ android/**/.gradle/
 android/**/local.properties
 android/**/app/build/
 android/**/build/
+
+# Android signing secrets
+*.jks
+*.keystore
+key.properties
+android/**/key.properties
+android/**/*.jks
+android/**/*.keystore
