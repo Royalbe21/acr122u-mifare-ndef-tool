@@ -11,6 +11,7 @@ This project started as a practical tool for writing phone-readable NFC business
 ## Features
 
 - Detects PC/SC readers such as the **ACS ACR122U**
+- Windows 11 desktop app with launcher icon
 - Reads card UID
 - Inspects MIFARE Classic 1K sector authentication
 - Formats owned MIFARE Classic 1K cards as **MAD1/NDEF**
@@ -61,6 +62,20 @@ Or double-click:
 ```text
 run_tool.bat
 ```
+
+For the Windows 11 desktop app:
+
+```text
+run_windows11_app.bat
+```
+
+To build a packaged Windows `.exe`:
+
+```powershell
+.\scripts\build_windows11_app.ps1
+```
+
+See [`docs/WINDOWS_11_APP.md`](docs/WINDOWS_11_APP.md).
 
 ---
 

@@ -26,6 +26,12 @@ copy config.master-of-repairs.template.json config.json
 python .\master_nfc_writer.py
 ```
 
+For the Windows 11 desktop app:
+
+```powershell
+.\run_windows11_app.bat
+```
+
 ## 4. Write one card
 
 ```text
@@ -38,4 +44,10 @@ python .\master_nfc_writer.py
 ```text
 1. Business Card Mode
 4. Batch format + write default business card
+```
+
+## 6. Build the Windows 11 app
+
+```powershell
+.\scripts\build_windows11_app.ps1
 ```
