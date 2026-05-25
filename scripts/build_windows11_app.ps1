@@ -11,6 +11,10 @@ function Get-PythonCommand {
     if (Get-Command py -ErrorAction SilentlyContinue) {
         return @("py", "-3")
     }
+    $bundledPython = Join-Path $env:USERPROFILE ".cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe"
+    if (Test-Path $bundledPython) {
+        return @($bundledPython)
+    }
     throw "Python 3.10 or newer was not found. Install it from https://www.python.org/downloads/windows/"
 }
 
@@ -18,6 +22,10 @@ function Invoke-Python {
     param(
         [string[]]$Arguments
     )
+
+    if ($script:PythonCommand -is [string]) {
+        $script:PythonCommand = @($script:PythonCommand)
+    }
 
     $exe = $script:PythonCommand[0]
     $prefix = @()
@@ -32,10 +40,18 @@ if (-not (Test-Path ".git")) {
 }
 
 $script:PythonCommand = Get-PythonCommand
+if ($script:PythonCommand -is [string]) {
+    $script:PythonCommand = @($script:PythonCommand)
+}
+$pythonRoot = Split-Path -Parent $script:PythonCommand[0]
 $iconPath = "assets\windows\master-nfc-writer.ico"
 $pngPath = "assets\windows\master-nfc-writer.png"
 $entryPoint = "src\master_nfc_writer_windows11.py"
 $appName = "MasterNfcWriter-Windows11"
+$tclPath = Join-Path $pythonRoot "tcl"
+$tkinterPydPath = Join-Path $pythonRoot "DLLs\_tkinter.pyd"
+$tclDllPath = Join-Path $pythonRoot "DLLs\tcl86t.dll"
+$tkDllPath = Join-Path $pythonRoot "DLLs\tk86t.dll"
 
 if (-not (Test-Path $iconPath)) {
     throw "Missing icon: $iconPath"
@@ -43,6 +59,10 @@ if (-not (Test-Path $iconPath)) {
 
 if (-not (Test-Path $pngPath)) {
     throw "Missing icon image: $pngPath"
+}
+
+if (-not (Test-Path $tclPath)) {
+    throw "Missing Tcl/Tk library folder: $tclPath"
 }
 
 if (-not $SkipInstall) {
@@ -62,6 +82,18 @@ Invoke-Python @(
     $iconPath,
     "--add-data",
     "assets\windows\master-nfc-writer.png;assets\windows",
+    "--add-data",
+    "$tclPath;tcl",
+    "--add-binary",
+    "$tkinterPydPath;.",
+    "--add-binary",
+    "$tclDllPath;.",
+    "--add-binary",
+    "$tkDllPath;.",
+    "--hidden-import",
+    "tkinter",
+    "--hidden-import",
+    "_tkinter",
     "--hidden-import",
     "smartcard.System",
     "--hidden-import",

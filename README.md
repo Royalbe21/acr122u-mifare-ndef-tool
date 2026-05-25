@@ -75,6 +75,12 @@ To build a packaged Windows `.exe`:
 .\scripts\build_windows11_app.ps1
 ```
 
+To build the Windows installer:
+
+```powershell
+.\scripts\build_windows_installer.ps1
+```
+
 See [`docs/WINDOWS_11_APP.md`](docs/WINDOWS_11_APP.md).
 
 ---

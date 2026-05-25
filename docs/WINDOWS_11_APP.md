@@ -38,6 +38,20 @@ dist\MasterNfcWriter-Windows11\MasterNfcWriter-Windows11.exe
 
 The build script uses PyInstaller, the Windows icon in `assets/windows/`, and the existing `pyscard` dependency.
 
+## Build The Installer
+
+Install Inno Setup 6, then run:
+
+```powershell
+.\scripts\build_windows_installer.ps1
+```
+
+The installer is created at:
+
+```text
+installers\MasterNfcWriter-Windows11-Setup.exe
+```
+
 ## Hardware
 
 - Windows 11

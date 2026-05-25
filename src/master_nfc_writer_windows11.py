@@ -12,8 +12,25 @@ import os
 import queue
 import sys
 import threading
-import tkinter as tk
 from pathlib import Path
+
+
+def prepare_tk_environment() -> None:
+    """Point frozen builds at their bundled Tcl/Tk libraries before importing tkinter."""
+    if not hasattr(sys, "_MEIPASS"):
+        return
+    base = Path(getattr(sys, "_MEIPASS"))
+    tcl_library = base / "tcl" / "tcl8.6"
+    tk_library = base / "tcl" / "tk8.6"
+    if tcl_library.exists():
+        os.environ.setdefault("TCL_LIBRARY", str(tcl_library))
+    if tk_library.exists():
+        os.environ.setdefault("TK_LIBRARY", str(tk_library))
+
+
+prepare_tk_environment()
+
+import tkinter as tk
 from tkinter import messagebox, ttk
 
 try:
